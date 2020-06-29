@@ -1,0 +1,217 @@
+<!doctype html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>reveal.js</title>
+
+		<link rel="stylesheet" href="css/reset.css">
+		<link rel="stylesheet" href="css/reveal.css">
+		<link rel="stylesheet" href="css/theme/biorender.css">
+
+		<!-- Theme used for syntax highlighting of code -->
+		<link rel="stylesheet" href="lib/css/monokai.css">
+
+		<style>
+			.reveal h1, .reveal h2, .reveal h3, .reveal h4, .reveal h5 {
+				text-transform: none;
+			}
+		</style>
+
+		<!-- Printing and PDF exports -->
+		<script>
+			var link = document.createElement( 'link' );
+			link.rel = 'stylesheet';
+			link.type = 'text/css';
+			link.href = window.location.search.match( /print-pdf/gi ) ? 'css/print/pdf.css' : 'css/print/paper.css';
+			document.getElementsByTagName( 'head' )[0].appendChild( link );
+		</script>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section data-markdown># Analytics Intro</section>
+
+				<section data-markdown><script type="text/template">
+					## Goals
+
+					- track events that users generate in the app <!-- .element: class="fragment" data-fragment-index="1" -->
+					- track payment events <!-- .element: class="fragment" data-fragment-index="2" -->
+					- allow relatively easy analysis (clean data) <!-- .element: class="fragment" data-fragment-index="3" -->
+					- own our data <!-- .element: class="fragment" data-fragment-index="4" -->
+				</script></section>
+
+				<section>
+					<img src="assets/flowchart.png" height="600" />
+				</section>
+
+				<section>
+					<section data-markdown><script type="text/template">
+						## How the app sends events
+
+						- create temporary tracking identity for users that aren't logged in <!-- .element: class="fragment" data-fragment-index="1" -->
+							- once a user with a temporary tracking identity logs in, all their events are associated with their actual BioRender user ID <!-- .element: class="fragment" data-fragment-index="2" -->
+					</script></section>
+
+					<section data-markdown>
+						```javascript
+						const logEventHandlers = [logEventMixpanel, logEventBioRenderAnalytics, logEventCustomerio];
+
+						export function logEvent(event, options = {}, analyticsOnly = false) {
+						        // ...
+						        logEventHandlers.forEach((handler) => {
+						            try {
+						                handler(event, options);
+						            } catch (err) {
+						                console.error(err);
+						            }
+						        });
+						}
+						```
+					</section>
+
+					<section data-markdown>
+						`BIORENDER_ANALYTICS_URL`: analytics.biorender.com
+
+						```javascript
+						export function logEventBioRenderAnalytics(event, data) {
+										// ...
+						        fetch(`${process.env.BIORENDER_ANALYTICS_URL}/event`, {
+						            method: 'POST',
+						            credentials: 'include',
+						            headers: {
+						                'Content-Type': 'application/json',
+						            },
+						            body: JSON.stringify({
+						                userId,
+						                type: event,
+						                properties: data,
+						            }),
+						        });
+						}
+						```
+					</section>
+				</section>
+
+				<section>
+					<section data-markdown><script type="text/template">
+						## Events
+
+						```javascript
+						{
+						  type: string,
+						  userId?: string,
+						  properties: {
+						    ...
+						  }
+						}
+						```
+
+						- type of event (constants defined in biorender) <!-- .element: class="fragment" data-fragment-index="1" -->
+						- BioRender user ID (if not provided, a temporary tracking ID is assigned) <!-- .element: class="fragment" data-fragment-index="2" -->
+						- properties (defined in and validated by database models) <!-- .element: class="fragment" data-fragment-index="3" -->
+					</script></section>
+
+					<section data-markdown><script type="text/template">
+						## Event Type
+
+						`common/tracking/index.js` (biorender):
+
+						```javascript
+						SUBMIT_REFERRAL: 'Submit referral',
+						DISMISS_REFERRAL_MODAL: 'Dismiss referral modal',
+						RIGHT_CLICK_ON_OBJECT: 'Right click on object',
+						RIGHT_CLICK_ON_CANVAS: 'Right click on canvas',
+						CROP_ASSET: 'Crop asset',
+						DND_MY_LIBRARY: 'Drag and drop from my library',
+						DND_LIBRARY: 'Drag and drop from asset from library',
+						// ...
+						```
+					</script></section>
+
+					<section data-markdown><script type="text/template">
+						## Event Properties
+
+						`src/models` (biorender-analytics):
+
+						```javascript
+						export default class EventNewIllustration extends BaseEventModel {
+						  public title!: string;
+						  public width!: number;
+						  public height!: number;
+						  public units!: string;
+						}
+						```
+					</script></section>
+
+					<section data-markdown><script type="text/template">
+						Register event class with:
+
+						- event constant from BioRender (`'New Illustration'`)
+						- database table name (`eventNewIllustration`)
+
+						```javascript
+						// ...
+{
+  eventName: 'New Illustration',
+  tableName: 'eventNewIllustration',
+  model: EventNewIllustration,
+  attributes: EventNewIllustrationAttributes,
+},
+// ...
+						```
+					</script></section>
+				</section>
+
+				<section data-markdown><script type="text/template">
+					## Analytics Server
+
+					- Typescript/Node.js <!-- .element: class="fragment" data-fragment-index="1" -->
+					- Very simple: takes event requests, writes them into database <!-- .element: class="fragment" data-fragment-index="2" -->
+					- very few dependencies, lightweight: Koa (small HTTP wrapper) and database libraries <!-- .element: class="fragment" data-fragment-index="3" -->
+				</script></section>
+
+				<section data-markdown><script type="text/template">
+					## Database
+
+					- PostgreSQL <!-- .element: class="fragment" data-fragment-index="1" -->
+						- fast, scalable, easy to query <!-- .element: class="fragment" data-fragment-index="2" -->
+						- schema handles the majority of validation for us <!-- .element: class="fragment" data-fragment-index="3" -->
+						- supported by analytics tools like Metabase, Apache Superset, Tableau <!-- .element: class="fragment" data-fragment-index="4" -->
+					- Sequelize ORM <!-- .element: class="fragment" data-fragment-index="5" -->
+						- connects database models to Javascript classes <!-- .element: class="fragment" data-fragment-index="6" -->
+						- potenitally replace with a better solution (verbose, poor migrations) <!-- .element: class="fragment" data-fragment-index="7" -->
+				</script></section>
+
+				<section>
+					<section data-markdown><script type="text/template">
+						## Tracking User States
+
+						- historical user states are needed for accurate analysis <!-- .element: class="fragment" data-fragment-index="1" -->
+						- whenever a user's state changes, save it <!-- .element: class="fragment" data-fragment-index="2" -->
+						- when a user creates a new event, associate it with their most recent user state <!-- .element: class="fragment" data-fragment-index="3" -->
+					</script></section>
+				</section>
+			</div>
+		</div>
+
+		<script src="js/reveal.js"></script>
+
+		<script>
+			// More info about config & dependencies:
+			// - https://github.com/hakimel/reveal.js#configuration
+			// - https://github.com/hakimel/reveal.js#dependencies
+			Reveal.initialize({
+				hash: true,
+				dependencies: [
+					{ src: 'plugin/markdown/marked.js' },
+					{ src: 'plugin/markdown/markdown.js' },
+					{ src: 'plugin/highlight/highlight.js', async: true },
+					{ src: 'plugin/zoom-js/zoom.js', async: true },
+					{ src: 'plugin/notes/notes.js', async: true }
+				]
+			});
+		</script>
+	</body>
+</html>
